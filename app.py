@@ -3,12 +3,13 @@ import pandas as pd
 import random
 import requests
 import json
+import threading  # <-- Esto es lo nuevo, la "magia" del segundo plano
 
 # Configuración del algoritmo Elo
 K_FACTOR = 32  
 INITIAL_ELO = 1200
 
-# Enlaces de conexión (¡Pon tu SCRIPT_URL real aquí!)
+# Enlaces de conexión
 SHEET_URL = "https://docs.google.com/spreadsheets/d/15aNvtR-6S3o3shFybzhC_Hi3w8jhOgBSoZ7lrFWB6r8/gviz/tq?tqx=out:csv&sheet=Datos"
 SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwiDnOilJPpuwTLM73-Q_jvuPqVySlb7zAe_wCv4UzklN5PwV-9ZWwLPD-r47t9Cq2idw/exec"
 
@@ -22,6 +23,13 @@ def cargar_datos_online():
         st.error(f"Error al conectar con Google Sheets: {e}")
         st.stop()
 
+# ESTA FUNCIÓN SE ENCARGA DE ENVIAR EL VOTO EN SECRETO MIENTRAS TÚ SIGUES JUGANDO
+def enviar_a_google_bg(payload_json):
+    try:
+        requests.post(SCRIPT_URL, data=payload_json, headers={"Content-Type": "application/json"})
+    except:
+        pass
+
 st.set_page_config(page_title="Ranker 1vs1 Online", layout="centered")
 st.title("🏆 Mi Ranker 1vs1 Online")
 
@@ -30,11 +38,9 @@ if "df" not in st.session_state:
 
 df = st.session_state.df
 
-# Asegurar tipos numéricos estrictos
 df["Elo"] = pd.to_numeric(df["Elo"], errors='coerce').fillna(INITIAL_ELO).astype(int)
 df["Partidos"] = pd.to_numeric(df["Partidos"], errors='coerce').fillna(0).astype(int)
 
-# Selección de rivales
 if "rivales" not in st.session_state:
     j1_idx = df["Partidos"].idxmin()
     j1_elo = df.loc[j1_idx, "Elo"]
@@ -59,7 +65,6 @@ def calcular_elo(rating_ganador, rating_perdedor):
 def actualizar_y_guardar(idx_ganador, idx_perdedor):
     nuevo_g, nuevo_p = calcular_elo(int(df.loc[idx_ganador, "Elo"]), int(df.loc[idx_perdedor, "Elo"]))
     
-    # 1. Modificar valores locales en memoria
     df.loc[idx_ganador, "Elo"] = int(nuevo_g)
     df.loc[idx_perdedor, "Elo"] = int(nuevo_p)
     df.loc[idx_ganador, "Partidos"] = int(df.loc[idx_ganador, "Partidos"]) + 1
@@ -67,7 +72,6 @@ def actualizar_y_guardar(idx_ganador, idx_perdedor):
     
     st.session_state.df = df
     
-    # 2. OPTIMIZACIÓN EXTREMA: Enviar SOLO los dos jugadores afectados
     payload = [
         {
             "Jugador": str(df.loc[idx_ganador, "Jugador"]),
@@ -82,11 +86,9 @@ def actualizar_y_guardar(idx_ganador, idx_perdedor):
     ]
     payload_json = json.dumps(payload)
     
-    # Enviar la micro-petición a Google de forma directa (es tan ligera que vuela)
-    try:
-        requests.post(SCRIPT_URL, data=payload_json, headers={"Content-Type": "application/json"})
-    except:
-        pass
+    # AQUÍ SE ABRE EL CAMINO SECRETO: Lanza el envío y no se queda esperando a Google
+    hilo = threading.Thread(target=enviar_a_google_bg, args=(payload_json,))
+    hilo.start()
         
     del st.session_state.rivales
     st.rerun()
