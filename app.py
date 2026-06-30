@@ -10,16 +10,16 @@ K_FACTOR = 32
 INITIAL_ELO = 1200
 
 # Enlaces de conexión (¡Asegúrate de mantener TU SCRIPT_URL aquí!)
-SHEET_URL = "https://docs.google.com/spreadsheets/d/15aNvtR-6S3o3shFybzhC_Hi3w8jhOgBSoZ7lrFWB6r8/gviz/tq?tqx=out:csv&sheet=Datos"
-SCRIPT_URL = "TU_URL_DE_APPS_SCRIPT_AQUÍ"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/15aNvtR-6S3o3shFybzhC_Hi3w8jhOgBSoZ7lrFWB6r8/pub?output=csv"
 
 def cargar_datos_online():
     try:
+        # Esto añade un número al azar al final para que el móvil no use datos viejos
         url_dinamica = f"{SHEET_URL}&nocache={random.randint(0, 100000)}"
         df = pd.read_csv(url_dinamica)
         return df
     except Exception as e:
-        st.error("Error al conectar con Google Sheets. Verifica tu enlace.")
+        st.error("Error al conectar con Google Sheets.")
         st.stop()
 
 # Función optimizada para guardar en segundo plano sin ralentizar la web
