@@ -6,9 +6,10 @@ import random
 K_FACTOR = 32  
 INITIAL_ELO = 1200
 
-# ⚠️ PEGA AQUÍ TU ENLACE MODIFICADO DE GOOGLE SHEETS
-# Recuerda que debe terminar en /export?format=csv
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRFj7azk5bpkaNBvui9A2ktnpJmnGnVC_jUnJw5whuK1cUKUgZhUkN6ecRGqy5sIIY0k9QZ0QD4rRzQ/pubhtml"def cargar_datos_online():
+# ⚠️ ENLACE CORREGIDO CON TUS DATOS EXACTOS:
+SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRFj7azk5bpkaNBvui9A2ktnpJmnGnVC_jUnJw5whuK1cUKUgZhUkN6ecRGqy5sIIYOk9QZ0QD4rRzQ/pub?output=csv"
+
+def cargar_datos_online():
     try:
         df = pd.read_csv(SHEET_URL)
         return df
