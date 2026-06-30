@@ -1,17 +1,19 @@
 import streamlit as st
 import pandas as pd
 import random
+import requests
+import json
 
 # Configuración del algoritmo Elo
 K_FACTOR = 32  
 INITIAL_ELO = 1200
 
-# Enlace de exportación limpia como CSV (sacado de tu captura)
+# Enlaces de conexión (¡CAMBIA EL SCRIPT_URL POR EL TUYO!)
 SHEET_URL = "https://docs.google.com/spreadsheets/d/15aNvtR-6S3o3shFybzhC_Hi3w8jhOgBSoZ7lrFWB6r8/gviz/tq?tqx=out:csv&sheet=Datos"
+SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwq6tW1ot8k8_DaSNnYa-zp0yiThSeqQ6R6hkCpNmoQEzITb8Wxg1GEKzsb0bFPugyWoQ/exec"
 
 def cargar_datos_online():
     try:
-        # Forzamos a pandas a descargar los datos ignorando la caché del navegador
         url_dinamica = f"{SHEET_URL}&nocache={random.randint(0, 100000)}"
         df = pd.read_csv(url_dinamica)
         return df
@@ -60,9 +62,17 @@ def actualizar_y_guardar(idx_ganador, idx_perdedor):
     df.loc[idx_ganador, "Partidos"] += 1
     df.loc[idx_perdedor, "Partidos"] += 1
     
-    # IMPORTANTE: Como no usamos Google Cloud para guardar de forma directa,
-    # el programa te generará el código de actualización en pantalla para tu control.
+    # 1. Guardar localmente en la sesión de la web
     st.session_state.df = df
+    
+    # 2. Enviar los datos actualizados a Google Sheets vía Apps Script
+    try:
+        # Convertimos el DataFrame a una lista de filas incluyendo las cabeceras
+        payload = [df.columns.tolist()] + df.values.tolist()
+        requests.post(SCRIPT_URL, data=json.dumps(payload), headers={"Content-Type": "application/json"})
+    except Exception as e:
+        st.warning("Los datos cambiaron en pantalla pero hubo un problema al guardarlos en el Excel.")
+        
     del st.session_state.rivales
     st.rerun()
 
