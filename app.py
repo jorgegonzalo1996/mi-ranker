@@ -3,14 +3,15 @@ import pandas as pd
 import random
 import requests
 import json
+import threading
 
 # Configuración del algoritmo Elo
 K_FACTOR = 32  
 INITIAL_ELO = 1200
 
-# Enlaces de conexión (¡CAMBIA EL SCRIPT_URL POR EL TUYO!)
+# Enlaces de conexión (¡Asegúrate de mantener TU SCRIPT_URL aquí!)
 SHEET_URL = "https://docs.google.com/spreadsheets/d/15aNvtR-6S3o3shFybzhC_Hi3w8jhOgBSoZ7lrFWB6r8/gviz/tq?tqx=out:csv&sheet=Datos"
-SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwq6tW1ot8k8_DaSNnYa-zp0yiThSeqQ6R6hkCpNmoQEzITb8Wxg1GEKzsb0bFPugyWoQ/exec"
+SCRIPT_URL = "TU_URL_DE_APPS_SCRIPT_AQUÍ"
 
 def cargar_datos_online():
     try:
@@ -21,6 +22,13 @@ def cargar_datos_online():
         st.error("Error al conectar con Google Sheets. Verifica tu enlace.")
         st.stop()
 
+# Función optimizada para guardar en segundo plano sin ralentizar la web
+def enviar_a_google_bg(payload_json):
+    try:
+        requests.post(SCRIPT_URL, data=payload_json, headers={"Content-Type": "application/json"})
+    except:
+        pass
+
 st.set_page_config(page_title="Ranker 1vs1 Online", layout="centered")
 st.title("🏆 Mi Ranker 1vs1 Online")
 
@@ -29,11 +37,9 @@ if "df" not in st.session_state:
 
 df = st.session_state.df
 
-# Asegurar tipos numéricos para el cálculo
 df["Elo"] = pd.to_numeric(df["Elo"], errors='coerce').fillna(INITIAL_ELO)
 df["Partidos"] = pd.to_numeric(df["Partidos"], errors='coerce').fillna(0)
 
-# Selección de rivales
 if "rivales" not in st.session_state:
     j1_idx = df["Partidos"].idxmin()
     j1_elo = df.loc[j1_idx, "Elo"]
@@ -62,16 +68,16 @@ def actualizar_y_guardar(idx_ganador, idx_perdedor):
     df.loc[idx_ganador, "Partidos"] += 1
     df.loc[idx_perdedor, "Partidos"] += 1
     
-    # 1. Guardar localmente en la sesión de la web
     st.session_state.df = df
     
-    # 2. Enviar los datos actualizados a Google Sheets vía Apps Script
-    try:
-        # Convertimos el DataFrame a una lista de filas incluyendo las cabeceras
-        payload = [df.columns.tolist()] + df.values.tolist()
-        requests.post(SCRIPT_URL, data=json.dumps(payload), headers={"Content-Type": "application/json"})
-    except Exception as e:
-        st.warning("Los datos cambiaron en pantalla pero hubo un problema al guardarlos en el Excel.")
+    # Preparar los datos
+    payload = [df.columns.tolist()] + df.values.tolist()
+    payload_json = json.dumps(payload)
+    
+    # ¡AQUÍ ESTÁ LA MAGIA!: Lanza el guardado en un hilo paralelo.
+    # El programa sigue ejecutándose inmediatamente sin esperar a Google.
+    hilo = threading.Thread(target=enviar_a_google_bg, args=(payload_json,))
+    hilo.start()
         
     del st.session_state.rivales
     st.rerun()
