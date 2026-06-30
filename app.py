@@ -10,18 +10,16 @@ INITIAL_ELO = 1200
 st.set_page_config(page_title="Ranker 1vs1 Online", layout="centered")
 st.title("🏆 Mi Ranker 1vs1 Online")
 
-# Crear la conexión nativa con Google Sheets (Gratuito)
+# Crear la conexión nativa con Google Sheets (Busca las credenciales en Secrets)
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Cargar datos de la hoja llamada "Hoja 1" (o el nombre de tu pestaña)
+# Cargar datos de la hoja de forma segura y automática
 if "df" not in st.session_state:
-    # Cambia el URL por el enlace normal de tu navegador de Google Sheets
-    SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRFj7azk5bpkaNBvui9A2ktnpJmnGnVC_jUnJw5whuK1cUKUgZhUkN6ecRGqy5sIIY0k9QZ0QD4rRzQ/pub?output=csv"
-    st.session_state.df = conn.read(spreadsheet=SHEET_URL, worksheet="Hoja 1")
+    st.session_state.df = conn.read(worksheet="Hoja 1")
 
 df = st.session_state.df
 
-# Asegurar tipos numéricos
+# Asegurar tipos numéricos para el cálculo
 df["Elo"] = pd.to_numeric(df["Elo"], errors='coerce').fillna(INITIAL_ELO)
 df["Partidos"] = pd.to_numeric(df["Partidos"], errors='coerce').fillna(0)
 
@@ -54,8 +52,8 @@ def actualizar_y_guardar(idx_ganador, idx_perdedor):
     df.loc[idx_ganador, "Partidos"] += 1
     df.loc[idx_perdedor, "Partidos"] += 1
     
-    # Guarda los cambios de vuelta en Google Sheets de forma automática
-    conn.update(spreadsheet=SHEET_URL, worksheet="Hoja 1", data=df)
+    # Guarda los cambios directamente en tu Google Sheets
+    conn.update(worksheet="Hoja 1", data=df)
     st.session_state.df = df
     del st.session_state.rivales
     st.rerun()
