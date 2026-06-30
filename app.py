@@ -1,30 +1,31 @@
 import streamlit as st
 import pandas as pd
 import random
+from streamlit_gsheets import GSheetsConnection
 
 # Configuración del algoritmo Elo
 K_FACTOR = 32  
 INITIAL_ELO = 1200
 
-# ENLACE CORREGIDO
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRFj7azk5bpkaNBvui9A2ktnpJmnGnVC_jUnJw5whuK1cUKUgZhUkN6ecRGqy5sIIY0k9QZ0QD4rRzQ/pub?output=csv"
-
-def cargar_datos_online():
-    try:
-        df = pd.read_csv(SHEET_URL)
-        return df
-    except Exception as e:
-        st.error("Error al conectar con Google Sheets. Verifica tu enlace.")
-        st.stop()
-
 st.set_page_config(page_title="Ranker 1vs1 Online", layout="centered")
 st.title("🏆 Mi Ranker 1vs1 Online")
 
+# Crear la conexión nativa con Google Sheets (Gratuito)
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+# Cargar datos de la hoja llamada "Hoja 1" (o el nombre de tu pestaña)
 if "df" not in st.session_state:
-    st.session_state.df = cargar_datos_online()
+    # Cambia el URL por el enlace normal de tu navegador de Google Sheets
+    SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRFj7azk5bpkaNBvui9A2ktnpJmnGnVC_jUnJw5whuK1cUKUgZhUkN6ecRGqy5sIIY0k9QZ0QD4rRzQ/pub?output=csv"
+    st.session_state.df = conn.read(spreadsheet=SHEET_URL, worksheet="Hoja 1")
 
 df = st.session_state.df
 
+# Asegurar tipos numéricos
+df["Elo"] = pd.to_numeric(df["Elo"], errors='coerce').fillna(INITIAL_ELO)
+df["Partidos"] = pd.to_numeric(df["Partidos"], errors='coerce').fillna(0)
+
+# Selección de rivales
 if "rivales" not in st.session_state:
     j1_idx = df["Partidos"].idxmin()
     j1_elo = df.loc[j1_idx, "Elo"]
@@ -46,19 +47,26 @@ def calcular_elo(rating_ganador, rating_perdedor):
     nuevo_perdedor = rating_perdedor + K_FACTOR * (0 - (1 - esperada_ganador))
     return round(nuevo_ganador), round(nuevo_perdedor)
 
+def actualizar_y_guardar(idx_ganador, idx_perdedor):
+    nuevo_g, nuevo_p = calcular_elo(df.loc[idx_ganador, "Elo"], df.loc[idx_perdedor, "Elo"])
+    df.loc[idx_ganador, "Elo"] = nuevo_g
+    df.loc[idx_perdedor, "Elo"] = nuevo_p
+    df.loc[idx_ganador, "Partidos"] += 1
+    df.loc[idx_perdedor, "Partidos"] += 1
+    
+    # Guarda los cambios de vuelta en Google Sheets de forma automática
+    conn.update(spreadsheet=SHEET_URL, worksheet="Hoja 1", data=df)
+    st.session_state.df = df
+    del st.session_state.rivales
+    st.rerun()
+
 with col1:
     if st.button(f"👉 {jugador_a}", use_container_width=True):
-        nuevo_a, nuevo_b = calcular_elo(df.loc[idx_a, "Elo"], df.loc[idx_b, "Elo"])
-        df.loc[idx_a, "Elo"], df.loc[idx_b, "Elo"] = nuevo_a, nuevo_b
-        df.loc[idx_a, "Partidos"] += 1; df.loc[idx_b, "Partidos"] += 1
-        del st.session_state.rivales; st.rerun()
+        actualizar_y_guardar(idx_a, idx_b)
 
 with col2:
     if st.button(f"👉 {jugador_b}", use_container_width=True):
-        nuevo_b, nuevo_a = calcular_elo(df.loc[idx_b, "Elo"], df.loc[idx_a, "Elo"])
-        df.loc[idx_a, "Elo"], df.loc[idx_b, "Elo"] = nuevo_a, nuevo_b
-        df.loc[idx_a, "Partidos"] += 1; df.loc[idx_b, "Partidos"] += 1
-        del st.session_state.rivales; st.rerun()
+        actualizar_y_guardar(idx_b, idx_a)
 
 st.markdown("---")
 st.write("### 📊 Top Actual")
