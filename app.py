@@ -6,7 +6,7 @@ import random
 K_FACTOR = 32  
 INITIAL_ELO = 1200
 
-# ⚠️ ENLACE CORREGIDO CON TUS DATOS EXACTOS:
+# ENLACE CORREGIDO
 SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRFj7azk5bpkaNBvui9A2ktnpJmnGnVC_jUnJw5whuK1cUKUgZhUkN6ecRGqy5sIIYOk9QZ0QD4rRzQ/pub?output=csv"
 
 def cargar_datos_online():
