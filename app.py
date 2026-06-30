@@ -15,7 +15,7 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 
 # Cargar datos de la hoja de forma segura y automática
 if "df" not in st.session_state:
-    st.session_state.df = conn.read(worksheet="Hoja 1")
+    st.session_state.df = conn.read(worksheet="Datos")
 
 df = st.session_state.df
 
@@ -53,7 +53,7 @@ def actualizar_y_guardar(idx_ganador, idx_perdedor):
     df.loc[idx_perdedor, "Partidos"] += 1
     
     # Guarda los cambios directamente en tu Google Sheets
-    conn.update(worksheet="Hoja 1", data=df)
+    conn.update(worksheet="Datos", data=df)
     st.session_state.df = df
     del st.session_state.rivales
     st.rerun()
