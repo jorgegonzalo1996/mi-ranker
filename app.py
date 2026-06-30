@@ -10,7 +10,7 @@ INITIAL_ELO = 1200
 
 # Enlaces de conexión (¡Asegúrate de cambiar SCRIPT_URL por tu enlace real de Apps Script!)
 SHEET_URL = "https://docs.google.com/spreadsheets/d/15aNvtR-6S3o3shFybzhC_Hi3w8jhOgBSoZ7lrFWB6r8/gviz/tq?tqx=out:csv&sheet=Datos"
-SCRIPT_URL = "TU_URL_DE_APPS_SCRIPT_AQUÍ"
+SCRIPT_URL = "https://script.google.com/macros/s/AKfycbysCAOEBINXdh-cFBgEgpXXyD11Qo2dwgMNWgTDtZS7L4ieyAYT1RIZd1d8wJR5JC6aUw/exec"
 
 def cargar_datos_online():
     try:
