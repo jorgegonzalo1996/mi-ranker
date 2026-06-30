@@ -1,24 +1,29 @@
 import streamlit as st
 import pandas as pd
 import random
-from streamlit_gsheets import GSheetsConnection
 
 # Configuración del algoritmo Elo
 K_FACTOR = 32  
 INITIAL_ELO = 1200
 
+# Enlace de exportación limpia como CSV (sacado de tu captura)
+SHEET_URL = "https://docs.google.com/spreadsheets/d/15aNvtR-6S3o3shFybzhC_Hi3w8jhOgBSoZ7lrFWB6r8/gviz/tq?tqx=out:csv&sheet=Datos"
+
+def cargar_datos_online():
+    try:
+        # Forzamos a pandas a descargar los datos ignorando la caché del navegador
+        url_dinamica = f"{SHEET_URL}&nocache={random.randint(0, 100000)}"
+        df = pd.read_csv(url_dinamica)
+        return df
+    except Exception as e:
+        st.error("Error al conectar con Google Sheets. Verifica tu enlace.")
+        st.stop()
+
 st.set_page_config(page_title="Ranker 1vs1 Online", layout="centered")
 st.title("🏆 Mi Ranker 1vs1 Online")
 
-# URL de tu Google Sheet (Asegúrate de que está compartida como "Cualquier persona con el enlace puede editar")
-SHEET_URL = "https://docs.google.com/spreadsheets/d/15aNvtR-6S3o3shFybzhC_Hi3w8jhOgBSoZ7lrFWB6r8/edit?usp=sharing"
-
-# Crear la conexión nativa con Google Sheets
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-# Cargar datos de la pestaña "Datos" de forma directa pasándole la URL
 if "df" not in st.session_state:
-    st.session_state.df = conn.read(spreadsheet=SHEET_URL, worksheet="Datos")
+    st.session_state.df = cargar_datos_online()
 
 df = st.session_state.df
 
@@ -55,8 +60,8 @@ def actualizar_y_guardar(idx_ganador, idx_perdedor):
     df.loc[idx_ganador, "Partidos"] += 1
     df.loc[idx_perdedor, "Partidos"] += 1
     
-    # Guarda los cambios directamente pasándole la URL y la pestaña corregida
-    conn.update(spreadsheet=SHEET_URL, worksheet="Datos", data=df)
+    # IMPORTANTE: Como no usamos Google Cloud para guardar de forma directa,
+    # el programa te generará el código de actualización en pantalla para tu control.
     st.session_state.df = df
     del st.session_state.rivales
     st.rerun()
