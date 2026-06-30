@@ -7,7 +7,7 @@ K_FACTOR = 32
 INITIAL_ELO = 1200
 
 # ENLACE CORREGIDO
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRFj7azk5bpkaNBvui9A2ktnpJmnGnVC_jUnJw5whuK1cUKUgZhUkN6ecRGqy5sIIYOk9QZ0QD4rRzQ/pub?output=csv"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/15aNvtR-6S3o3shFybzhC_Hi3w8jhOgBSoZ7lrFWB6r8/edit?pli=1&gid=0#gid=0"
 
 def cargar_datos_online():
     try:
