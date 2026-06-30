@@ -14,9 +14,9 @@ SCRIPT_URL = "TU_URL_DE_APPS_SCRIPT_AQUÍ"
 
 def cargar_datos_online():
     try:
-        # Añadimos un parámetro aleatorio al final para obligar a Google a enviar los datos más recientes
         url_dinamica = f"{SHEET_URL}&nocache={random.randint(0, 100000)}"
         df = pd.read_csv(url_dinamica)
+        df = df.fillna("")
         return df
     except Exception as e:
         st.error(f"Error al conectar con Google Sheets: {e}")
@@ -25,15 +25,14 @@ def cargar_datos_online():
 st.set_page_config(page_title="Ranker 1vs1 Online", layout="centered")
 st.title("🏆 Mi Ranker 1vs1 Online")
 
-# Cada vez que se recarga la página de forma limpia, se comprueba si hay datos nuevos
 if "df" not in st.session_state:
     st.session_state.df = cargar_datos_online()
 
 df = st.session_state.df
 
-# Asegurar tipos numéricos para el cálculo
-df["Elo"] = pd.to_numeric(df["Elo"], errors='coerce').fillna(INITIAL_ELO)
-df["Partidos"] = pd.to_numeric(df["Partidos"], errors='coerce').fillna(0)
+# Asegurar tipos numéricos iniciales
+df["Elo"] = pd.to_numeric(df["Elo"], errors='coerce').fillna(INITIAL_ELO).astype(int)
+df["Partidos"] = pd.to_numeric(df["Partidos"], errors='coerce').fillna(0).astype(int)
 
 # Selección de rivales
 if "rivales" not in st.session_state:
@@ -55,22 +54,33 @@ def calcular_elo(rating_ganador, rating_perdedor):
     esperada_ganador = 1 / (1 + 10 ** ((rating_perdedor - rating_ganador) / 400))
     nuevo_ganador = rating_ganador + K_FACTOR * (1 - esperada_ganador)
     nuevo_perdedor = rating_perdedor + K_FACTOR * (0 - (1 - esperada_ganador))
-    return round(nuevo_ganador), round(nuevo_perdedor)
+    return int(round(nuevo_ganador)), int(round(nuevo_perdedor))
 
 def actualizar_y_guardar(idx_ganador, idx_perdedor):
-    nuevo_g, nuevo_p = calcular_elo(df.loc[idx_ganador, "Elo"], df.loc[idx_perdedor, "Elo"])
-    df.loc[idx_ganador, "Elo"] = nuevo_g
-    df.loc[idx_perdedor, "Elo"] = nuevo_p
-    df.loc[idx_ganador, "Partidos"] += 1
-    df.loc[idx_perdedor, "Partidos"] += 1
+    nuevo_g, nuevo_p = calcular_elo(int(df.loc[idx_ganador, "Elo"]), int(df.loc[idx_perdedor, "Elo"]))
+    
+    # Modificar valores forzándolos a enteros estándar de Python (evita int64 de numpy)
+    df.loc[idx_ganador, "Elo"] = int(nuevo_g)
+    df.loc[idx_perdedor, "Elo"] = int(nuevo_p)
+    df.loc[idx_ganador, "Partidos"] = int(df.loc[idx_ganador, "Partidos"]) + 1
+    df.loc[idx_perdedor, "Partidos"] = int(df.loc[idx_perdedor, "Partidos"]) + 1
     
     st.session_state.df = df
     
-    # Preparar la matriz de datos para Google Sheets
-    payload = [df.columns.tolist()] + df.values.tolist()
+    # CONVERSIÓN CRUCIAL: Convertimos la tabla a tipos nativos puros (str, int) para que no rompa JSON
+    df_limpio = df.copy()
+    columnas = df_limpio.columns.tolist()
+    
+    # Pasamos fila por fila convirtiendo los tipos numpy a tipos estándar de Python
+    filas_nativas = []
+    for fila in df_limpio.values.tolist():
+        fila_convertida = [int(x) if isinstance(x, (int, float)) or type(x).__name__ == 'int64' else str(x) for x in fila]
+        filas_nativas.append(fila_convertida)
+        
+    payload = [columnas] + filas_nativas
     payload_json = json.dumps(payload)
     
-    # Enviar los datos de forma directa asegurando el guardado inmediato
+    # Enviar los datos
     try:
         response = requests.post(SCRIPT_URL, data=payload_json, headers={"Content-Type": "application/json"})
         if response.status_code != 200:
