@@ -10,12 +10,15 @@ INITIAL_ELO = 1200
 st.set_page_config(page_title="Ranker 1vs1 Online", layout="centered")
 st.title("🏆 Mi Ranker 1vs1 Online")
 
-# Crear la conexión nativa con Google Sheets (Busca las credenciales en Secrets)
+# URL de tu Google Sheet (Asegúrate de que está compartida como "Cualquier persona con el enlace puede editar")
+SHEET_URL = "https://docs.google.com/spreadsheets/d/15aNvtR-6S3o3shFybzhC_Hi3w8jhOgBSoZ7lrFWB6r8/edit?usp=sharing"
+
+# Crear la conexión nativa con Google Sheets
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Cargar datos de la hoja de forma segura y automática
+# Cargar datos de la pestaña "Datos" de forma directa pasándole la URL
 if "df" not in st.session_state:
-    st.session_state.df = conn.read(worksheet="Datos")
+    st.session_state.df = conn.read(spreadsheet=SHEET_URL, worksheet="Datos")
 
 df = st.session_state.df
 
@@ -52,8 +55,8 @@ def actualizar_y_guardar(idx_ganador, idx_perdedor):
     df.loc[idx_ganador, "Partidos"] += 1
     df.loc[idx_perdedor, "Partidos"] += 1
     
-    # Guarda los cambios directamente en tu Google Sheets
-    conn.update(worksheet="Datos", data=df)
+    # Guarda los cambios directamente pasándole la URL y la pestaña corregida
+    conn.update(spreadsheet=SHEET_URL, worksheet="Datos", data=df)
     st.session_state.df = df
     del st.session_state.rivales
     st.rerun()
