@@ -8,8 +8,7 @@ INITIAL_ELO = 1200
 
 # ⚠️ PEGA AQUÍ TU ENLACE MODIFICADO DE GOOGLE SHEETS
 # Recuerda que debe terminar en /export?format=csv
-SHEET_URL = "https://docs.google.com/spreadsheets/d/15aNvtR-6S3o3shFybzhC_Hi3w8jhOGbSoZ7IrFWB6r8/export?format=csv"
-def cargar_datos_online():
+SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-......./pub?output=csv"def cargar_datos_online():
     try:
         df = pd.read_csv(SHEET_URL)
         return df
