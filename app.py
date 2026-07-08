@@ -7,21 +7,33 @@ st.set_page_config(page_title="Organizador de Tiers NBA", layout="wide")
 # 1. CONEXIÓN A GOOGLE SHEETS
 conn = st.connection("gsheets", type=GSheetsConnection)
 
+# URL Limpia sin parámetros extras de gid
+SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1NAxcX0MNJkQdIZ_aCz_qqc6z4y4MWq6msTEaJRiJUzQ/edit"
+
 # Función para leer los datos limpios de tu enlace
 def cargar_datos():
-    # Lee el enlace directo de tu hoja
     df = conn.read(
-        spreadsheet="https://docs.google.com/spreadsheets/d/1NAxcX0MNJkQdIZ_aCz_qqc6z4y4MWq6msTEaJRiJUzQ/edit?gid=0#gid=0",
-        usecols=[0, 1, 2, 3], 
+        spreadsheet=SPREADSHEET_URL,
         ttl=0
     )
-    # Limpieza básica de registros vacíos y tipos de datos
+    
+    # Limpiar nombres de columnas eliminando espacios
+    df.columns = df.columns.astype(str).str.strip()
+    
+    # Renombrado inteligente automático
+    col_id = [c for c in df.columns if 'id' in c.lower()][0]
+    col_jugador = [c for c in df.columns if 'jugador' in c.lower() or 'nombre' in c.lower()][0]
+    col_posicion = [c for c in df.columns if 'posic' in c.lower()][0]
+    col_tier = [c for c in df.columns if 'tier' in c.lower()][0]
+    
+    df = df.rename(columns={col_id: "ID", col_jugador: "Jugador", col_posicion: "Posicion", col_tier: "Tier"})
+    
     df = df.dropna(subset=["ID", "Jugador"])
     df["ID"] = df["ID"].astype(int)
     df["Tier"] = df["Tier"].fillna(0).astype(int)
-    return df
+    return df[["ID", "Jugador", "Posicion", "Tier"]]
 
-# Inicializar datos en la sesión de Streamlit para evitar recargas molestas
+# Inicializar datos en la sesión de Streamlit
 if "df_jugadores" not in st.session_state:
     st.session_state.df_jugadores = cargar_datos()
 if "jugador_actual" not in st.session_state:
@@ -34,7 +46,6 @@ df = st.session_state.df_jugadores
 # OBJETIVOS POR TIER PARA TUS 857 JUGADORES
 OBJETIVOS = {1: 171, 2: 154, 3: 129, 4: 111, 5: 94, 6: 77, 7: 60, 8: 43, 9: 18}
 
-# Buscar el siguiente jugador de la lista cuyo Tier sea 0
 def obtener_siguiente():
     sin_clasificar = df[df["Tier"] == 0]
     if not sin_clasificar.empty:
@@ -72,11 +83,17 @@ if st.session_state.jugador_actual is not None:
         with b_quedar:
             if st.button("🤝 Guardar en este Tier", type="primary"):
                 df.loc[df["ID"] == j["ID"], "Tier"] = st.session_state.tier_propuesto
-                # Sincroniza mandando de vuelta el DataFrame entero a tu URL
-                conn.update(
-                    spreadsheet="https://docs.google.com/spreadsheets/d/1NAxcX0MNJkQdIZ_aCz_qqc6z4y4MWq6msTEaJRiJUzQ/edit?gid=0#gid=0",
-                    data=df
-                )
+                
+                # Intentar actualizar especificando los parámetros requeridos
+                try:
+                    conn.update(
+                        spreadsheet=SPREADSHEET_URL,
+                        data=df
+                    )
+                except Exception:
+                    # Alternativa si el backend bloquea updates globales sin cuenta de servicio en la nube
+                    st.error("Error de permisos de escritura. Asegúrate de añadir las credenciales en Secrets si continúa.")
+                
                 st.toast(f"¡{j['Jugador']} guardado en Tier {st.session_state.tier_propuesto}!")
                 obtener_siguiente()
                 st.rerun()
@@ -132,7 +149,7 @@ for idx, tab in enumerate(tabs):
                     id_j = jugadores_en_tier[jugadores_en_tier["Jugador"] == jugador_selec]["ID"].values[0]
                     df.loc[df["ID"] == id_j, "Tier"] = nuevo_tier
                     conn.update(
-                        spreadsheet="https://docs.google.com/spreadsheets/d/1NAxcX0MNJkQdIZ_aCz_qqc6z4y4MWq6msTEaJRiJUzQ/edit?gid=0#gid=0",
+                        spreadsheet=SPREADSHEET_URL,
                         data=df
                     )
                     st.toast(f"{jugador_selec} movido al Tier {nuevo_tier}")
