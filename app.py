@@ -1,108 +1,103 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
-import random
-import requests
-import json
-import threading  # <-- Esto es lo nuevo, la "magia" del segundo plano
 
-# Configuración del algoritmo Elo
-K_FACTOR = 32  
-INITIAL_ELO = 1200
+st.set_page_config(page_title="Organizador de Tiers NBA", layout="wide")
 
-# Enlaces de conexión
-SHEET_URL = "https://docs.google.com/spreadsheets/d/15aNvtR-6S3o3shFybzhC_Hi3w8jhOgBSoZ7lrFWB6r8/gviz/tq?tqx=out:csv&sheet=Datos"
-SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwiDnOilJPpuwTLM73-Q_jvuPqVySlb7zAe_wCv4UzklN5PwV-9ZWwLPD-r47t9Cq2idw/exec"
+# 1. CONEXIÓN A GOOGLE SHEETS
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-def cargar_datos_online():
-    try:
-        url_dinamica = f"{SHEET_URL}&nocache={random.randint(0, 100000)}"
-        df = pd.read_csv(url_dinamica)
-        df = df.fillna("")
-        return df
-    except Exception as e:
-        st.error(f"Error al conectar con Google Sheets: {e}")
-        st.stop()
+# Función para leer los datos limpios de tu enlace
+def cargar_datos():
+    # Lee el enlace directo de tu hoja
+    df = conn.read(
+        spreadsheet="https://docs.google.com/spreadsheets/d/1NAxcX0MNJkQdIZ_aCz_qqc6z4y4MWq6msTEaJRiJUzQ/edit?gid=0#gid=0",
+        usecols=[0, 1, 2, 3], 
+        ttl=0
+    )
+    # Limpieza básica de registros vacíos y tipos de datos
+    df = df.dropna(subset=["ID", "Jugador"])
+    df["ID"] = df["ID"].astype(int)
+    df["Tier"] = df["Tier"].fillna(0).astype(int)
+    return df
 
-# ESTA FUNCIÓN SE ENCARGA DE ENVIAR EL VOTO EN SECRETO MIENTRAS TÚ SIGUES JUGANDO
-def enviar_a_google_bg(payload_json):
-    try:
-        requests.post(SCRIPT_URL, data=payload_json, headers={"Content-Type": "application/json"})
-    except:
-        pass
+# Inicializar datos en la sesión de Streamlit
+if "df_jugadores" not in st.session_state:
+    st.session_state.df_jugadores = cargar_datos()
+if "jugador_actual" not in st.session_state:
+    st.session_state.jugador_actual = None
+if "tier_propuesto" not in st.session_state:
+    st.session_state.tier_propuesto = 5
 
-st.set_page_config(page_title="Ranker 1vs1 Online", layout="centered")
-st.title("🏆 Mi Ranker 1vs1 Online")
+df = st.session_state.df_jugadores
 
-if "df" not in st.session_state:
-    st.session_state.df = cargar_datos_online()
+# OBJETIVOS POR TIER PARA TUS 857 JUGADORES
+OBJETIVOS = {1: 171, 2: 154, 3: 129, 4: 111, 5: 94, 6: 77, 7: 60, 8: 43, 9: 18}
 
-df = st.session_state.df
+# Buscar el siguiente jugador de la lista cuyo Tier sea 0
+def obtener_siguiente():
+    sin_clasificar = df[df["Tier"] == 0]
+    if not sin_clasificar.empty:
+        st.session_state.jugador_actual = sin_clasificar.iloc[0]
+        st.session_state.tier_propuesto = 5
+    else:
+        st.session_state.jugador_actual = None
 
-df["Elo"] = pd.to_numeric(df["Elo"], errors='coerce').fillna(INITIAL_ELO).astype(int)
-df["Partidos"] = pd.to_numeric(df["Partidos"], errors='coerce').fillna(0).astype(int)
+if st.session_state.jugador_actual is None:
+    obtener_siguiente()
 
-if "rivales" not in st.session_state:
-    j1_idx = df["Partidos"].idxmin()
-    j1_elo = df.loc[j1_idx, "Elo"]
-    candidatos = df[df.index != j1_idx]
-    candidatos_cercanos = candidatos.iloc[(candidatos["Elo"] - j1_elo).abs().argsort()[:30]]
-    j2_idx = random.choice(candidatos_cercanos.index.tolist())
-    st.session_state.rivales = (j1_idx, j2_idx)
+st.title("🏀 Organizador de Tiers - Juego de Cartas")
 
-idx_a, idx_b = st.session_state.rivales
-jugador_a = df.loc[idx_a, "Jugador"]
-jugador_b = df.loc[idx_b, "Jugador"]
+# ==========================================
+# SECCIÓN 1: FILTRO PIRAMIDAL
+# ==========================================
+st.write("---")
+st.subheader("🔄 Clasificador Rápido")
 
-st.write("### ¿Quién es mejor?")
-col1, col2 = st.columns(2)
-
-def calcular_elo(rating_ganador, rating_perdedor):
-    esperada_ganador = 1 / (1 + 10 ** ((rating_perdedor - rating_ganador) / 400))
-    nuevo_ganador = rating_ganador + K_FACTOR * (1 - esperada_ganador)
-    nuevo_perdedor = rating_perdedor + K_FACTOR * (0 - (1 - esperada_ganador))
-    return int(round(nuevo_ganador)), int(round(nuevo_perdedor))
-
-def actualizar_y_guardar(idx_ganador, idx_perdedor):
-    nuevo_g, nuevo_p = calcular_elo(int(df.loc[idx_ganador, "Elo"]), int(df.loc[idx_perdedor, "Elo"]))
+if st.session_state.jugador_actual is not None:
+    j = st.session_state.jugador_actual
     
-    df.loc[idx_ganador, "Elo"] = int(nuevo_g)
-    df.loc[idx_perdedor, "Elo"] = int(nuevo_p)
-    df.loc[idx_ganador, "Partidos"] = int(df.loc[idx_ganador, "Partidos"]) + 1
-    df.loc[idx_perdedor, "Partidos"] = int(df.loc[idx_perdedor, "Partidos"]) + 1
-    
-    st.session_state.df = df
-    
-    payload = [
-        {
-            "Jugador": str(df.loc[idx_ganador, "Jugador"]),
-            "Elo": int(df.loc[idx_ganador, "Elo"]),
-            "Partidos": int(df.loc[idx_ganador, "Partidos"])
-        },
-        {
-            "Jugador": str(df.loc[idx_perdedor, "Jugador"]),
-            "Elo": int(df.loc[idx_perdedor, "Elo"]),
-            "Partidos": int(df.loc[idx_perdedor, "Partidos"])
-        }
-    ]
-    payload_json = json.dumps(payload)
-    
-    # AQUÍ SE ABRE EL CAMINO SECRETO: Lanza el envío y no se queda esperando a Google
-    hilo = threading.Thread(target=enviar_a_google_bg, args=(payload_json,))
-    hilo.start()
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown(f"### **{j['Jugador']}** ({j['Posicion']})")
+        st.metric(label="Tier Propuesto", value=f"Tier {st.session_state.tier_propuesto}")
         
-    del st.session_state.rivales
-    st.rerun()
+        b_mejor, b_quedar, b_peor = st.columns(3)
+        
+        with b_mejor:
+            if st.button("🔼 Es Mejor") and st.session_state.tier_propuesto < 9:
+                st.session_state.tier_propuesto += 1
+                st.rerun()
+                
+        with b_quedar:
+            if st.button("🤝 Guardar en este Tier", type="primary"):
+                df.loc[df["ID"] == j["ID"], "Tier"] = st.session_state.tier_propuesto
+                # Sincroniza mandando de vuelta el DataFrame entero a tu URL
+                conn.update(
+                    spreadsheet="https://docs.google.com/spreadsheets/d/1NAxcX0MNJkQdIZ_aCz_qqc6z4y4MWq6msTEaJRiJUzQ/edit?gid=0#gid=0",
+                    data=df
+                )
+                st.toast(f"¡{j['Jugador']} guardado en Tier {st.session_state.tier_propuesto}!")
+                obtener_siguiente()
+                st.rerun()
+                
+        with b_peor:
+            if st.button("🔽 Es Peor") and st.session_state.tier_propuesto > 1:
+                st.session_state.tier_propuesto -= 1
+                st.rerun()
+else:
+    st.success("🎉 ¡Todos los jugadores han sido clasificados!")
 
-with col1:
-    if st.button(f"👉 {jugador_a}", use_container_width=True):
-        actualizar_y_guardar(idx_a, idx_b)
+# ==========================================
+# SECCIÓN 2: VISTA GLOBAL Y SUSTITUCIONES
+# ==========================================
+st.write("---")
+st.subheader("📋 Panel Global de Tiers y Modificaciones")
 
-with col2:
-    if st.button(f"👉 {jugador_b}", use_container_width=True):
-        actualizar_y_guardar(idx_b, idx_a)
+tabs = st.tabs([f"Tier {i}" for i in range(1, 10)])
 
-st.markdown("---")
-st.write("### 📊 Top Actual")
-ranking_actual = df.sort_values(by="Elo", ascending=False).reset_index(drop=True)
-ranking_actual.index += 1
-st.dataframe(ranking_actual[["Jugador", "Elo", "Partidos"]], use_container_width=True, height=400)
+for idx, tab in enumerate(tabs):
+    tier_num = idx + 1
+    with tab:
+        jugadores_en_tier = df[df["Tier"] == tier_num]
+        total_actual = len(jugadores_en_tier
