@@ -1,28 +1,22 @@
 import streamlit as st
 import pandas as pd
-import gspread
-from gspread_dataframe import set_with_dataframe
+import requests
+import json
 
 st.set_page_config(page_title="Organizador de Tiers NBA", layout="wide")
 
-# URL directa y limpia de tu documento
-SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1NAxcX0MNJkQdIZ_aCz_qqc6z4y4MWq6msTEaJRiJUzQ/edit"
+# CONFIGURACIÓN DE ENLACES
+# 1. Tu enlace original de lectura por CSV
+CSV_URL = "https://docs.google.com/spreadsheets/d/1NAxcX0MNJkQdIZ_aCz_qqc6z4y4MWq6msTEaJRiJUzQ/export?format=csv&gid=0"
 
-# Función para cargar los datos usando gspread de forma anónima/pública para lectura
+# 2. URL de tu aplicación web de Google Apps Script
+WEBHOOK_URL = "https://script.google.com/macros/s/AKfycbzAQdxdxN2GjpM_tP04GihyidOy2mFYqF1ixWuvMZjUxPELYDbvlAfVfI39f4sh8gDewA/exec"
+
+# Función para leer los datos de forma pública sin credenciales
 def cargar_datos():
-    try:
-        # Intentar conectar de forma pública
-        gc = gspread.public()
-        sh = gc.open_by_url(SPREADSHEET_URL)
-        worksheet = sh.get_worksheet(0)
-        list_of_hashes = worksheet.get_all_records()
-        df = pd.DataFrame(list_of_hashes)
-    except Exception:
-        # Fallback de lectura directa por CSV si falla la librería pública
-        csv_url = SPREADSHEET_URL.replace("/edit", "/export?format=csv")
-        df = pd.read_csv(csv_url)
-        
-    # Limpieza de nombres de columnas
+    df = pd.read_csv(CSV_URL)
+    
+    # Limpiar nombres de columnas
     df.columns = df.columns.astype(str).str.strip()
     
     # Renombrado inteligente automático
@@ -35,18 +29,22 @@ def cargar_datos():
     df = df.dropna(subset=["ID", "Jugador"])
     df["ID"] = df["ID"].astype(int)
     df["Tier"] = df["Tier"].fillna(0).astype(int)
-    
     return df[["ID", "Jugador", "Posicion", "Tier"]]
 
-# Función optimizada para guardar los cambios de vuelta en tu Google Sheets
+# Función para guardar datos enviándolos al Webhook de Google Apps Script
 def guardar_datos(df_a_guardar):
-    try:
-        # Usamos st.connection de fondo exclusivamente para la escritura autenticada por los secrets
-        from streamlit_gsheets import GSheetsConnection
-        conn = st.connection("gsheets", type=GSheetsConnection)
-        conn.update(spreadsheet=SPREADSHEET_URL, data=df_a_guardar)
-    except Exception:
-        st.error("Por seguridad, recuerda mantener el acceso general de tu Google Sheets como 'Cualquier persona con el enlace -> Editor'.")
+    # Convertimos el dataframe a formato JSON para mandarlo por HTTP
+    data_json = df_a_guardar.to_dict(orient="records")
+    
+    with st.spinner("Sincronizando con Google Sheets..."):
+        try:
+            response = requests.post(WEBHOOK_URL, data=json.dumps(data_json), headers={"Content-Type": "application/json"})
+            if response.status_code == 200:
+                st.success("¡Guardado correctamente en la nube!")
+            else:
+                st.error(f"Error al guardar. Código de estado: {response.status_code}")
+        except Exception as e:
+            st.error(f"Error de conexión: {e}")
 
 # Inicializar estados de la sesión
 if "df_jugadores" not in st.session_state:
@@ -99,7 +97,6 @@ if st.session_state.jugador_actual is not None:
             if st.button("🤝 Guardar en este Tier", type="primary"):
                 df.loc[df["ID"] == j["ID"], "Tier"] = st.session_state.tier_propuesto
                 guardar_datos(df)
-                st.toast(f"¡{j['Jugador']} guardado en Tier {st.session_state.tier_propuesto}!")
                 obtener_siguiente()
                 st.rerun()
                 
@@ -154,7 +151,6 @@ for idx, tab in enumerate(tabs):
                     id_j = jugadores_en_tier[jugadores_en_tier["Jugador"] == jugador_selec]["ID"].values[0]
                     df.loc[df["ID"] == id_j, "Tier"] = nuevo_tier
                     guardar_datos(df)
-                    st.toast(f"{jugador_selec} movido al Tier {nuevo_tier}")
                     st.rerun()
         else:
             st.caption("Aún no hay jugadores en este tier.")
