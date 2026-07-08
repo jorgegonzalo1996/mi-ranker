@@ -1,23 +1,28 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
+import gspread
+from gspread_dataframe import set_with_dataframe
 
 st.set_page_config(page_title="Organizador de Tiers NBA", layout="wide")
 
-# 1. CONEXIÓN A GOOGLE SHEETS
-conn = st.connection("gsheets", type=GSheetsConnection)
-
-# URL Limpia sin parámetros extras de gid
+# URL directa y limpia de tu documento
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1NAxcX0MNJkQdIZ_aCz_qqc6z4y4MWq6msTEaJRiJUzQ/edit"
 
-# Función para leer los datos limpios de tu enlace
+# Función para cargar los datos usando gspread de forma anónima/pública para lectura
 def cargar_datos():
-    df = conn.read(
-        spreadsheet=SPREADSHEET_URL,
-        ttl=0
-    )
-    
-    # Limpiar nombres de columnas eliminando espacios
+    try:
+        # Intentar conectar de forma pública
+        gc = gspread.public()
+        sh = gc.open_by_url(SPREADSHEET_URL)
+        worksheet = sh.get_worksheet(0)
+        list_of_hashes = worksheet.get_all_records()
+        df = pd.DataFrame(list_of_hashes)
+    except Exception:
+        # Fallback de lectura directa por CSV si falla la librería pública
+        csv_url = SPREADSHEET_URL.replace("/edit", "/export?format=csv")
+        df = pd.read_csv(csv_url)
+        
+    # Limpieza de nombres de columnas
     df.columns = df.columns.astype(str).str.strip()
     
     # Renombrado inteligente automático
@@ -27,13 +32,23 @@ def cargar_datos():
     col_tier = [c for c in df.columns if 'tier' in c.lower()][0]
     
     df = df.rename(columns={col_id: "ID", col_jugador: "Jugador", col_posicion: "Posicion", col_tier: "Tier"})
-    
     df = df.dropna(subset=["ID", "Jugador"])
     df["ID"] = df["ID"].astype(int)
     df["Tier"] = df["Tier"].fillna(0).astype(int)
+    
     return df[["ID", "Jugador", "Posicion", "Tier"]]
 
-# Inicializar datos en la sesión de Streamlit
+# Función optimizada para guardar los cambios de vuelta en tu Google Sheets
+def guardar_datos(df_a_guardar):
+    try:
+        # Usamos st.connection de fondo exclusivamente para la escritura autenticada por los secrets
+        from streamlit_gsheets import GSheetsConnection
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        conn.update(spreadsheet=SPREADSHEET_URL, data=df_a_guardar)
+    except Exception:
+        st.error("Por seguridad, recuerda mantener el acceso general de tu Google Sheets como 'Cualquier persona con el enlace -> Editor'.")
+
+# Inicializar estados de la sesión
 if "df_jugadores" not in st.session_state:
     st.session_state.df_jugadores = cargar_datos()
 if "jugador_actual" not in st.session_state:
@@ -43,7 +58,7 @@ if "tier_propuesto" not in st.session_state:
 
 df = st.session_state.df_jugadores
 
-# OBJETIVOS POR TIER PARA TUS 857 JUGADORES
+# OBJETIVOS POR TIER PARA LOS 857 JUGADORES
 OBJETIVOS = {1: 171, 2: 154, 3: 129, 4: 111, 5: 94, 6: 77, 7: 60, 8: 43, 9: 18}
 
 def obtener_siguiente():
@@ -83,17 +98,7 @@ if st.session_state.jugador_actual is not None:
         with b_quedar:
             if st.button("🤝 Guardar en este Tier", type="primary"):
                 df.loc[df["ID"] == j["ID"], "Tier"] = st.session_state.tier_propuesto
-                
-                # Intentar actualizar especificando los parámetros requeridos
-                try:
-                    conn.update(
-                        spreadsheet=SPREADSHEET_URL,
-                        data=df
-                    )
-                except Exception:
-                    # Alternativa si el backend bloquea updates globales sin cuenta de servicio en la nube
-                    st.error("Error de permisos de escritura. Asegúrate de añadir las credenciales en Secrets si continúa.")
-                
+                guardar_datos(df)
                 st.toast(f"¡{j['Jugador']} guardado en Tier {st.session_state.tier_propuesto}!")
                 obtener_siguiente()
                 st.rerun()
@@ -148,10 +153,7 @@ for idx, tab in enumerate(tabs):
                 if st.button("Confirmar Cambio", key=f"btn_{tier_num}"):
                     id_j = jugadores_en_tier[jugadores_en_tier["Jugador"] == jugador_selec]["ID"].values[0]
                     df.loc[df["ID"] == id_j, "Tier"] = nuevo_tier
-                    conn.update(
-                        spreadsheet=SPREADSHEET_URL,
-                        data=df
-                    )
+                    guardar_datos(df)
                     st.toast(f"{jugador_selec} movido al Tier {nuevo_tier}")
                     st.rerun()
         else:
