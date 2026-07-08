@@ -21,7 +21,7 @@ def cargar_datos():
     df["Tier"] = df["Tier"].fillna(0).astype(int)
     return df
 
-# Inicializar datos en la sesión de Streamlit
+# Inicializar datos en la sesión de Streamlit para evitar recargas molestas
 if "df_jugadores" not in st.session_state:
     st.session_state.df_jugadores = cargar_datos()
 if "jugador_actual" not in st.session_state:
@@ -100,4 +100,42 @@ for idx, tab in enumerate(tabs):
     tier_num = idx + 1
     with tab:
         jugadores_en_tier = df[df["Tier"] == tier_num]
-        total_actual = len(jugadores_en_tier
+        total_actual = len(jugadores_en_tier)
+        objetivo = OBJETIVOS[tier_num]
+        
+        if total_actual > objetivo:
+            st.warning(f"Cupo: {total_actual} / {objetivo} (¡Te has pasado!)")
+        else:
+            st.info(f"Cupo: {total_actual} / {objetivo}")
+            
+        if not jugadores_en_tier.empty:
+            col_lista, col_mover = st.columns([3, 2])
+            
+            with col_lista:
+                st.dataframe(jugadores_en_tier[["ID", "Jugador", "Posicion"]], use_container_width=True, hide_index=True)
+                
+            with col_mover:
+                st.write("**🔄 Cambiar de Tier a un jugador:**")
+                jugador_selec = st.selectbox(
+                    "Selecciona el jugador:", 
+                    jugadores_en_tier["Jugador"].tolist(), 
+                    key=f"sb_{tier_num}"
+                )
+                nuevo_tier = st.selectbox(
+                    "Mover al Tier:", 
+                    list(range(1, 10)), 
+                    index=tier_num-1, 
+                    key=f"nt_{tier_num}"
+                )
+                
+                if st.button("Confirmar Cambio", key=f"btn_{tier_num}"):
+                    id_j = jugadores_en_tier[jugadores_en_tier["Jugador"] == jugador_selec]["ID"].values[0]
+                    df.loc[df["ID"] == id_j, "Tier"] = nuevo_tier
+                    conn.update(
+                        spreadsheet="https://docs.google.com/spreadsheets/d/1NAxcX0MNJkQdIZ_aCz_qqc6z4y4MWq6msTEaJRiJUzQ/edit?gid=0#gid=0",
+                        data=df
+                    )
+                    st.toast(f"{jugador_selec} movido al Tier {nuevo_tier}")
+                    st.rerun()
+        else:
+            st.caption("Aún no hay jugadores en este tier.")
